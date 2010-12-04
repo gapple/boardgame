@@ -1,0 +1,195 @@
+<?php
+// $Id$
+/**
+ * @file
+ * Install, update and uninstall functions for the boardgame module.
+ */
+
+/**
+ * Implementation of hook_schema
+ */
+function boardgame_schema() {
+  $schema=array();
+
+  $schema['boardgame_game'] = array(
+    'description' => '',
+    'fields' => array(
+      'gameid' => array(
+        'description' => 'Game identifier',
+        'type' => 'serial',
+        'size' => 'normal',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'type' => array(
+        'description' => 'Game type (e.g. chess, checkers, chess.3d)',
+        'type' => 'varchar',
+        'size' => 'normal',
+        'length' => 255,
+        'not null' => TRUE,
+      ),
+      'player_count' => array(
+        'description' => 'The number of players required for this game.',
+        'type' => 'int',
+        'size' => 'small', // We shouldn't expect more than 255 players, but we'll be safe
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 2,
+      ),
+      'current_ply' => array(
+        'description' => 'The current ply for this game.',
+        'type' => 'int',
+        'size' => 'normal',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ),
+    'primary key' => array('game'),
+  );
+
+  $schema['boardgame_game_player'] = array(
+    'description' => 'player - game registrations',
+    'fields' => array(
+      'gameid' => array(
+        'description' => 'Game identifier',
+        'type' => 'int',
+        'size' => 'normal',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'playerid' => array(
+        'description' => 'Player identifier',
+        'type' => 'int',
+        'size' => 'normal',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'sequence' => array(
+        'description' => 'The sequence of the player in rotation as determined at game start.',
+        'type' => 'int',
+        'size' => 'small', // We shouldn't expect more than 255 players, but we'll be safe
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ),
+    'primary key' => array('game', 'player'),
+    'index' => array(
+      'player' => array('player'),
+    )
+  );
+
+  $schema['boardgame_ply'] = array(
+    'description' => 'Board game state and moves for each ply',
+    'fields' => array(
+      'gameid' => array(
+        'description' => 'Game number',
+        'type' => 'int',
+        'size' => 'normal',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'ply' => array(
+        'description' => 'Ply number; 0 indicates starting positions',
+        'type' => 'int',
+        'size' => 'normal',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'playerid' => array(
+        'description' => 'The player who made the move for this ply.',
+        'type' => 'int',
+        'size' => 'normal',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'when' => array(
+        'description' => 'The UNIX timestamp of when this move was stored.',
+        'type' => 'int',
+        'size' => 'normal',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'move' => array(
+        'description' => 'The move made during this ply.',
+        'type' => 'text',
+        'size' => 'normal',
+        'not null' => TRUE,
+        'serialize' => TRUE,
+      ),
+      'state' => array(
+        'description' => 'The game state after the move during this ply.',
+        'type' => 'text',
+        'size' => 'normal',
+        'not null' => TRUE,
+        'serialize' => TRUE,
+      ),
+    ),
+    'primary key' => array('game', 'ply'),
+    'indexes' => array(
+      'player_game' => array('player', 'game'),
+    ),
+  );
+
+  $schema['boardgame_player'] = array(
+    'description' => 'Registered player info',
+    'fields' => array(
+      'playerid' => array(
+        'description' => 'Player idenifier.',
+        'type' => 'serial',
+        'size' => 'normal',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'uid' => array(
+        'description' => 'The user who registered this player.',
+        'type' => 'int',
+        'size' => 'normal',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'name' => array(
+        'description' => 'A short, human-readable name for this player.',
+        'type' => 'varchar',
+        'size' => 'normal',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'description' => array(
+        'description' => 'Additional information on this player.',
+        'type' => 'text',
+        'size' => 'normal',
+        'not null' => TRUE,
+        'default' => '',
+      ),
+    ),
+    'primary key' => array('playerid'),
+    'indexes' => array(
+      'user' => array('uid'),
+    ),
+  );
+
+  return $schema;
+}
+/**
+ * Implementation of hook_install
+ */
+function boardgame_install() {
+  drupal_install_schema('boardgame');
+}
+/**
+ * Implementation of hook_uninstall
+ */
+function boardgame_uninstall() {
+  drupal_uninstall_schema('boardgame');
+}

@@ -1,0 +1,5 @@
+
+name = Board Game
+description = Facilitate board games between bots
+core = 6.x
+
