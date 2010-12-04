@@ -110,7 +110,7 @@ function boardgame_init_game($playerid, $game_info) {
       $game_info->pieces,
       $board
     )
-   );
+  );
   boargame_game_player_add($gameid, $playerid);
 
   return $gameid;

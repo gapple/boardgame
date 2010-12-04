@@ -6,7 +6,7 @@
  */
 
 /**
- * Implementation of hook_schema
+ * Implementation of hook_schema().
  */
 function boardgame_schema() {
   $schema=array();
@@ -182,13 +182,13 @@ function boardgame_schema() {
   return $schema;
 }
 /**
- * Implementation of hook_install
+ * Implementation of hook_install().
  */
 function boardgame_install() {
   drupal_install_schema('boardgame');
 }
 /**
- * Implementation of hook_uninstall
+ * Implementation of hook_uninstall().
  */
 function boardgame_uninstall() {
   drupal_uninstall_schema('boardgame');
