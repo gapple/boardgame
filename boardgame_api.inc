@@ -253,12 +253,12 @@ function boardgame_apply_move($board, $move) {
       else{
         $board[$action->position] = array(
           'type' => $action->type,
-          'player' => $action->player,
+          'set' => $action->set,
         );
       }
     }
     elseif ($action->action == 'remove') {
-      if (empty($board[$action->position]) || $board[$action->position]->type != $action->type || $board[$action->position]->player != $action->player) {
+      if (empty($board[$action->position]) || $board[$action->position]->type != $action->type || $board[$action->position]->set != $action->set) {
         boardgame_set_error(t(
           'Cannot remove @set @type from position (@position): Not present in tile.',
           array('@type' => $action->type, '@set' => $action->set, '@position' => $action->position)
