@@ -1,0 +1,116 @@
+<?php
+// $Id$
+/**
+ * Implementation of hook_perm().
+ */
+function boardgame_perm() {
+  return array(
+    'register boardgame players',
+    'view boardgame games',
+  );
+}
+
+/**
+ * Implementation of hook_menu().
+ */
+function boardgame_menu() {
+  $items['boardgame'] = array(
+    'title' => 'Board Game Dashboard',
+    'description' => 'Overview of boardgame information',
+    'type' => MENU_NORMAL_ITEM,
+    'access callback' => 'user_access',
+    'access arguments' => array('view boardgame games'),
+    'page callback' => 'boardgame_page_list_games',
+  );
+  $items['boardgame/list'] = array(
+    'title' => 'List Games',
+    'description' => 'List Board Game Games',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'access arguments' => array('view boardgame games'),
+  );
+  $items['boardgame/game'] = array(
+    'title' => 'View a game',
+    'description' => 'View a game',
+    'type' => MENU_CALLBACK,
+    'access arguments' => array('view boardgame games'),
+    'page callback' => 'boardgame_page_game',
+  );
+
+  return $items;
+}
+
+/**
+ * Output a table of active games
+ */
+function boardgame_page_list_games() {
+  $header = array(t('Game Type'), t('Player Count'), t('Current Ply'), t('View'));
+
+  $result = db_query('SELECT bgg.gameid, bgg.type, bgp.ply, bgg.player_count, ' .
+      '(SELECT count(*) FROM {boardgame_game_player} bggp WHERE bggp.gameid = bgg.gameid) player_count_registered ' .
+      'FROM {boardgame_game} bgg LEFT JOIN {boardgame_ply} bgp ON bgg.gameid = bgp.gameid AND bgp.ply = bgg.current_ply ');
+
+  $rows = array();
+  while ($game = db_fetch_object($result)) {
+    $rows[] = array(
+      $game->type,
+      $game->player_count_registered . '/' . $game->player_count,
+      $game->ply,
+      l('View', 'boardgame/game/' . $game->gameid),
+    );
+  }
+
+  return theme_table($header, $rows);
+}
+
+/**
+ * Output a table display of a game.  If a specific ply is not specified,
+ * the latest game state is displayed.
+ */
+function boardgame_page_game($gameid = NULL, $ply = NULL) {
+  if (empty($gameid) || !is_numeric($gameid)) {
+    return t('A valid game id was not provided');
+  }
+
+  $gameid = intval($gameid);
+  if (isset($ply)) {
+    if (!is_numeric($ply)) {
+      return t('An invalid ply was provided');
+    }
+    $ply = intval($ply);
+  }
+
+  module_load_include('inc', 'boardgame', 'boardgame_api');
+
+  $game = boardgame_get_game($gameid, $ply);
+  if (!$game) {
+    return boardgame_get_error();
+  }
+  // convert the linear array of tiles to a table
+  $rows = array();
+  foreach ($game->state as $key => $tile) {
+    preg_match('/^([a-z]+)([\d]+)/i', $key, $matches);
+
+    $file = $matches[1];
+    $rank = $matches[2];
+
+    $rows[$rank][$file] = '';
+    if (!empty($tile)) {
+      $rows[$rank][$file] = $tile->set . ' ' . $tile->type;
+    }
+  }
+  // Ranks need to be reversed to display properly (higher numbers at top)
+  krsort($rows);
+  // Files should be added in the proper order, but be safe.
+  foreach (array_keys($rows) as $key) {
+    ksort($rows[$key]);
+  }
+
+  $content = theme_table(array_keys($rows[1]), $rows);
+
+  // TODO show information for last move
+  if ($game->ply > 0) {
+
+  }
+
+  return $content;
+}

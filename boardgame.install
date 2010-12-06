@@ -109,7 +109,7 @@ function boardgame_schema() {
         'not null' => TRUE,
         'default' => 0,
       ),
-      'when' => array(
+      'updated' => array(
         'description' => 'The UNIX timestamp of when this move was stored.',
         'type' => 'int',
         'size' => 'normal',

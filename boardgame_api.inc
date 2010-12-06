@@ -12,7 +12,7 @@
  * @return
  *   The previously stored message, or NULL if empty.
  */
-function _gameboard_error($message = NULL) {
+function _boardgame_error($message = NULL) {
   static $error;
   if (isset($message)) {
     $error = $message;
@@ -25,8 +25,8 @@ function _gameboard_error($message = NULL) {
  * @param $message
  *    Error message to store
  */
-function gameboard_set_error($message) {
-  _gameboard_error($message);
+function boardgame_set_error($message) {
+  _boardgame_error($message);
 }
 /**
  * Retrieve the last error message.
@@ -34,8 +34,8 @@ function gameboard_set_error($message) {
  * @return
  *    The last error message string.
  */
-function gameboard_get_error() {
-  return _gameboard_error();
+function boardgame_get_error() {
+  return _boardgame_error();
 }
 
 /**
@@ -49,6 +49,7 @@ function gameboard_get_error() {
  * e.g.
  * @code
  *  {
+ *    type = 'chess',
  *    rows = 8,
  *    cols = 8,
  *    player_count = 2,
@@ -95,23 +96,29 @@ function boardgame_init_game($playerid, $game_info) {
 
   // apply positions
   // 'action' isn't specified for board setup, but is needed for application function
+  $pieces = array();
   foreach ($game_info->pieces as $key => $action) {
-    $game_info->pieces[$key]['action'] = 'add';
+    $pieces[$key] = clone $action;
+    $pieces[$key]->action = 'add';
   }
-  $board = boardgame_apply_move($board, $game_info->pieces);
+  $board = boardgame_apply_move($board, $pieces);
+  if (!$board) {
+    // bubble up error message
+    return FALSE;
+  }
 
   // Create game entry, initialize board, and add starting player
-  db_query('INSERT INTO {boardgame_game}(type, player_count) VALUES(%s, %d)', array($game_info->type, $game_info->player_count));
-  $gameid = db_last_insert_id();
+  $result = db_query('INSERT INTO {boardgame_game}(type, player_count) VALUES("%s", %d)', array($game_info->type, $game_info->player_count));
+  $gameid = db_last_insert_id('boardgame_game', 'gameid');
 
-  db_query('INSERT INTO {boardgame_ply}(gameid, move, state) VALUES(%d, %s, %s)',
+  db_query('INSERT INTO {boardgame_ply}(gameid, move, state) VALUES(%d, "%s", "%s")',
     array(
       $gameid,
-      $game_info->pieces,
-      $board
+      serialize($game_info->pieces),
+      serialize($board),
     )
   );
-  boargame_game_player_add($gameid, $playerid);
+  boardgame_game_add_player($gameid, $playerid);
 
   return $gameid;
 }
@@ -137,19 +144,18 @@ function boardgame_get_game($gameid, $ply = NULL) {
       return $cache[$gameid][$ply];
     }
     $query_ply = '%d';
-    $query_param = array_shift($query_param, $ply);
+    array_unshift($query_param, $ply);
   }
   else { // retrieve the latest state of the board
     $query_ply = 'bgg.current_ply';
   }
-
   $result = db_query(
-      'SELECT bgg.gameid, bgg.type, bgg.player_count, bgp.ply, bgp.state, bgp.move ' .
-      'FROM {boardgame_game} bgg LEFT JOIN {boardgame_ply} bgp ON bgg.gameid = bgp.gameid AND bpg.ply = ' . $query_ply .
+      'SELECT bgg.gameid, bgg.type, bgg.player_count, ' .
+      'bgg.current_ply, bgp.ply, bgp.state, bgp.move, bgp.updated move_time ' .
+      'FROM {boardgame_game} bgg INNER JOIN {boardgame_ply} bgp ON bgg.gameid = bgp.gameid AND bgp.ply = ' . $query_ply .
       ' WHERE bgg.gameid = %d',
       $query_param
     );
-
   $state = db_fetch_object($result);
 
   if (!$state) {
@@ -181,26 +187,34 @@ function boardgame_get_game($gameid, $ply = NULL) {
  * @return
  *    The number of the new ply on success, or FALSE on failure.
  */
-function boardgame_update_game($gameid, $move) {
-  $last_ply = boardgame_get_game($gameid);
+function boardgame_update_game($gameid, $playerid, $move) {
+  $last_state = boardgame_get_game($gameid);
 
-  $board = boardgame_apply_move($last_ply->state, $move);
+  $board = boardgame_apply_move($last_state->state, $move);
   if (!$board) {
     return FALSE;
   }
 
-  db_query('INSERT INTO {boardgame_ply}(gameid, ply, move, state) VALUES(%d, %d, %s, %s)',
+  $result = db_query('INSERT INTO {boardgame_ply}(gameid, playerid, ply, updated, move, state) VALUES(%d, %d, %d, %d, "%s", "%s")',
     array(
       $gameid,
-      ($last_ply['ply'] + 1),
-      $move,
-      $board
+      $playerid,
+      ($last_state->ply + 1),
+      time(),
+      serialize($move),
+      serialize($board)
     )
   );
 
-  db_query('UPDATE {boardgame_game} SET current_ply = %d WHERE gameid = %d', array(($last_ply['ply'] + 1), $gameid));
+  if (!$result) {
+    boardgame_set_error(t(
+      'Error storing move'
+    ));
+    return FALSE;
+  }
+  db_query('UPDATE {boardgame_game} SET current_ply = %d WHERE gameid = %d', array(($last_state->ply + 1), $gameid));
 
-  return $last_ply['ply'] + 1;
+  return $last_state->ply + 1;
 }
 
 /**
@@ -251,10 +265,8 @@ function boardgame_apply_move($board, $move) {
         // TODO allow multiple units per tile
       }
       else{
-        $board[$action->position] = array(
-          'type' => $action->type,
-          'set' => $action->set,
-        );
+        $board[$action->position]->type = $action->type;
+        $board[$action->position]->set = $action->set;
       }
     }
     elseif ($action->action == 'remove') {
@@ -290,9 +302,17 @@ function boardgame_apply_move($board, $move) {
  * @return
  *    TRUE if the player was added succesfully, or FALSE on error.
  */
-function boargame_game_add_player($gameid, $playerid) {
+function boardgame_game_add_player($gameid, $playerid) {
 
   $game_info = boardgame_get_game($gameid);
+
+  if (!$game_info) {
+    boardgame_set_error(t(
+      'Cannot add player: Invalid game id specified (@game)',
+      array('@game' => $gameid)
+    ));
+    return FALSE;
+  }
   // check if the game has started yet
   if ($game_info->current_ply) {
     boardgame_set_error(t(
@@ -314,7 +334,7 @@ function boargame_game_add_player($gameid, $playerid) {
     return FALSE;
   }
 
-  if (array_search($playerid, $players) !== FALSE) {
+  if (!empty($players) && array_search($playerid, $players) !== FALSE) {
     boardgame_set_error(t(
       'Cannot add player @player to game @game: Player already added.',
       array('@player' => $playerid, '@game' => $gameid)
@@ -342,8 +362,10 @@ function boardgame_game_get_players($gameid) {
 
   $players = array();
   while ($p = db_fetch_object($result)) {
-    $players[] = $p->player;
+    $players[] = $p->playerid;
   }
+
+  return $players;
 }
 
 /**
