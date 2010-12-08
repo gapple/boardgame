@@ -36,6 +36,49 @@ function boardgame_menu() {
     'page callback' => 'boardgame_page_game',
   );
 
+  $items['boardgame/player'] = array(
+    'title' => 'Players',
+    'description' => 'List Board Game Players',
+    'type' => MENU_NORMAL_ITEM,
+    'access arguments' => array('view boardgame games'),
+    'page callback' => 'boardgame_page_player_list',
+  );
+  $items['boardgame/player/list'] = array(
+    'title' => 'List',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'weight' => -10,
+  );
+  $items['boardgame/player/add'] = array(
+    'title' => 'Create',
+    'description' => 'Register a new player.',
+    'type' => MENU_LOCAL_TASK,
+    'access arguments' => array('register boardgame players'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('boardgame_form_player_add'),
+  );
+  $items['boardgame/player/%'] = array(
+    'title' => 'View player info',
+    'description' => 'View player information.',
+    'type' => MENU_CALLBACK,
+    'access arguments' => array('view boardgame games'),
+    'page callback' => 'boardgame_player_view',
+    'page arguments' => array(2),
+  );
+  $items['boardgame/player/%/view'] = array(
+    'title' => 'View',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'access arguments' => array('view boardgame games'),
+    'weight' => -10,
+  );
+  $items['boardgame/player/%/edit'] = array(
+    'title' => 'Edit',
+    'type' => MENU_LOCAL_TASK,
+    'access callback' => 'boardgame_user_player_edit_access',
+    'access arguments' => array(2),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('boardgame_form_player_edit', 2),
+  );
+
   return $items;
 }
 
@@ -113,4 +156,151 @@ function boardgame_page_game($gameid = NULL, $ply = NULL) {
   }
 
   return $content;
+}
+
+
+function boardgame_page_player_list(){
+  $header = array('Name', 'Description', 'Games Played', 'Last Move');
+
+  $result = db_query('SELECT playerid, name, description, ' .
+      '(SELECT count(*) FROM {boardgame_game_player} bggp WHERE bggp.playerid = bgp.playerid) games, ' .
+      '(SELECT FROM_UNIXTIME(updated, "%M %D, %Y - %H%:%i:%%s") FROM {boardgame_ply} bgply WHERE bgply.playerid = bgp.playerid ORDER BY updated DESC LIMIT 1) last_move ' .
+      'FROM {boardgame_player} bgp ORDER BY last_move DESC');
+  $rows = array();
+  while ($player = db_fetch_array($result)){
+    $playerid = $player['playerid'];
+    unset($player['playerid']);
+    $player['name'] = l($player['name'], 'boardgame/player/' . $playerid);
+    $rows[] = $player;
+  };
+
+  $content = theme_table($header, $rows);
+
+  return $content;
+}
+
+function boardgame_player_view($playerid){
+  $content = '';
+  $player = db_fetch_object(db_query('SELECT bgp.playerid, bgp.name, bgp.description, ' .
+      '(SELECT count(*) FROM {boardgame_game_player} bggp WHERE bggp.playerid = bgp.playerid) games, ' .
+      'FROM_UNIXTIME(bgply.updated, "%M %D, %Y - %H%:%i:%%s") last_move_time, bgply.gameid last_move_game, bgply.ply last_move_ply ' .
+      'FROM {boardgame_player} bgp ' .
+      'LEFT JOIN (SELECT gameid, ply, playerid, updated FROM {boardgame_ply} bgply2 WHERE bgply2.playerid = %s ORDER BY updated DESC LIMIT 1) bgply ON bgply.playerid = bgp.playerid ' .
+      'WHERE bgp.playerid = %d' .
+      '', array($playerid, $playerid)));
+
+  $content .= '<div><strong>Name:</strong> ' . check_plain($player->name) . '</div>';
+  $content .= '<div><strong>Description:</strong> ' . check_plain($player->description) . '</div>';
+  $content .= '<div><strong>Games Played:</strong> ' . check_plain($player->games) . '</div>';
+  if($player->last_move_game){
+    $content .= '<div><strong>Last Move:</strong> ' . l($player->last_move_time, 'boardgame/game/' . $player->last_move_game . '/' . $player->last_move_ply) . '</div>';
+  }
+
+
+  return $content;
+}
+
+function boardgame_form_player_add(){
+  $form = array();
+
+  global $user;
+  $form['uid'] = array(
+    '#type' => 'value',
+    '#value' => $user->uid,
+  );
+  $form['name'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Player Name'),
+    '#description' => t('Enter a short, unique, name for your player.'),
+    '#size' => 30,
+    '#maxlength' => 255,
+    '#required' => TRUE,
+  );
+  $form['description'] = array(
+    '#type' => 'textarea',
+    '#title' => t('Description'),
+    '#description' => t('Enter a short description of your player.'),
+  );
+
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Create Player'),
+  );
+
+  return $form;
+}
+function boardgame_form_player_add_submit($form, &$form_state){
+  module_load_include('inc', 'boardgame', 'boardgame_api');
+
+  $playerid = boardgame_player_create($form_state['values']);
+  if($playerid){
+    drupal_set_message(t('Your player was succesfully created.'), 'status');
+    $form_state['redirect'] = 'boardgame/player/' . $playerid;
+  }
+  else{
+    drupal_set_message(t('An error occured while creating your player.'), 'error');
+  }
+}
+
+/**
+ * Check if a user should have access to edit the specified player.
+ */
+function boardgame_user_player_edit_access($playerid){
+
+  // check if the current user is the creator of this player
+  global $user;
+  $uid = db_result(db_query('SELECT uid FROM {boardgame_player} WHERE playerid = %d', array($playerid)));
+
+  return ($uid == $user->uid);
+}
+
+function boardgame_form_player_edit($playerid){
+  $form = array();
+
+  $result = db_query('SELECT name, description FROM {boardgame_player} WHERE playerid = %d', array($playerid));
+  $record = db_fetch_object($result);
+  if(!$record){
+    drupal_set_message(t('Unable to find player #@player', array('@player' => $playerid)));
+    return;
+  }
+
+  $form['playerid'] = array(
+    '#type' => 'value',
+    '#value' => $playerid,
+  );
+
+  $form['name'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Player Name'),
+    '#description' => t('Enter a short, unique, name for your player.'),
+    '#size' => 30,
+    '#maxlength' => 255,
+    '#required' => TRUE,
+    '#default_value' => $record->name,
+  );
+  $form['description'] = array(
+    '#type' => 'textarea',
+    '#title' => t('Description'),
+    '#description' => t('Enter a short description of your player.'),
+    '#default_value' => $record->description,
+  );
+
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Edit Player'),
+  );
+
+  return $form;
+}
+function boardgame_form_player_edit_submit($form, &$form_state){
+  module_load_include('inc', 'boardgame', 'boardgame_api');
+
+  $success = boardgame_player_update($form_state['values']);
+  if($success){
+    drupal_set_message(t('Your player was succesfully updated.'), 'status');
+    $form_state['redirect'] = 'boardgame/player/' . $form_state['playerid'];
+  }
+  else{
+    drupal_set_message(t('An error occured while updating your player.'), 'error');
+  }
 }

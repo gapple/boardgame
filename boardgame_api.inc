@@ -411,3 +411,41 @@ function boardgame_game_set_player_sequence($gameid) {
   }
 }
 
+/**
+ * Register a player in the database.
+ * @param $info
+ *    A keyed array of additional information for the player
+ *    e.g.
+ * @code
+ *    [
+ 		'uid' => 1,
+ *      'name' => 'bot',
+ *      'description' => 'awesome'
+ *    ]
+ * @endcode
+ */
+function boardgame_player_create($info) {
+  $success = drupal_write_record('boardgame_player', $info);
+
+  return ($success)? $info['playerid'] : FALSE;
+}
+/**
+ * Update a player's info in the database.
+ *
+ * @param $info
+ *    a keyed array of the information to change.  If a key is not present,
+ *    the current value will be kept
+ *    e.g.
+ * @code
+ *    [
+ *      'playerid' => 1,
+ *      'name' => 'bot',
+ *      'description' => 'awesome'
+ *    ]
+ * @endcode
+ */
+function boardgame_player_update($info) {
+  $success = drupal_write_record('boardgame_player', $info, array('playerid'));
+
+  return ($success && db_affected_rows())? TRUE : FALSE;
+}
