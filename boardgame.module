@@ -159,7 +159,7 @@ function boardgame_page_game($gameid = NULL, $ply = NULL) {
 }
 
 
-function boardgame_page_player_list(){
+function boardgame_page_player_list() {
   $header = array('Name', 'Description', 'Games Played', 'Last Move');
 
   $result = db_query('SELECT playerid, name, description, ' .
@@ -167,7 +167,7 @@ function boardgame_page_player_list(){
       '(SELECT FROM_UNIXTIME(updated, "%M %D, %Y - %H%:%i:%%s") FROM {boardgame_ply} bgply WHERE bgply.playerid = bgp.playerid ORDER BY updated DESC LIMIT 1) last_move ' .
       'FROM {boardgame_player} bgp ORDER BY last_move DESC');
   $rows = array();
-  while ($player = db_fetch_array($result)){
+  while ($player = db_fetch_array($result)) {
     $playerid = $player['playerid'];
     unset($player['playerid']);
     $player['name'] = l($player['name'], 'boardgame/player/' . $playerid);
@@ -179,7 +179,7 @@ function boardgame_page_player_list(){
   return $content;
 }
 
-function boardgame_player_view($playerid){
+function boardgame_player_view($playerid) {
   $content = '';
   $player = db_fetch_object(db_query('SELECT bgp.playerid, bgp.name, bgp.description, ' .
       '(SELECT count(*) FROM {boardgame_game_player} bggp WHERE bggp.playerid = bgp.playerid) games, ' .
@@ -192,7 +192,7 @@ function boardgame_player_view($playerid){
   $content .= '<div><strong>Name:</strong> ' . check_plain($player->name) . '</div>';
   $content .= '<div><strong>Description:</strong> ' . check_plain($player->description) . '</div>';
   $content .= '<div><strong>Games Played:</strong> ' . check_plain($player->games) . '</div>';
-  if($player->last_move_game){
+  if ($player->last_move_game) {
     $content .= '<div><strong>Last Move:</strong> ' . l($player->last_move_time, 'boardgame/game/' . $player->last_move_game . '/' . $player->last_move_ply) . '</div>';
   }
 
@@ -200,7 +200,7 @@ function boardgame_player_view($playerid){
   return $content;
 }
 
-function boardgame_form_player_add(){
+function boardgame_form_player_add() {
   $form = array();
 
   global $user;
@@ -229,15 +229,15 @@ function boardgame_form_player_add(){
 
   return $form;
 }
-function boardgame_form_player_add_submit($form, &$form_state){
+function boardgame_form_player_add_submit($form, &$form_state) {
   module_load_include('inc', 'boardgame', 'boardgame_api');
 
   $playerid = boardgame_player_create($form_state['values']);
-  if($playerid){
+  if ($playerid) {
     drupal_set_message(t('Your player was succesfully created.'), 'status');
     $form_state['redirect'] = 'boardgame/player/' . $playerid;
   }
-  else{
+  else {
     drupal_set_message(t('An error occured while creating your player.'), 'error');
   }
 }
@@ -245,7 +245,7 @@ function boardgame_form_player_add_submit($form, &$form_state){
 /**
  * Check if a user should have access to edit the specified player.
  */
-function boardgame_user_player_edit_access($playerid){
+function boardgame_user_player_edit_access($playerid) {
 
   // check if the current user is the creator of this player
   global $user;
@@ -254,12 +254,12 @@ function boardgame_user_player_edit_access($playerid){
   return ($uid == $user->uid);
 }
 
-function boardgame_form_player_edit($playerid){
+function boardgame_form_player_edit($playerid) {
   $form = array();
 
   $result = db_query('SELECT name, description FROM {boardgame_player} WHERE playerid = %d', array($playerid));
   $record = db_fetch_object($result);
-  if(!$record){
+  if (!$record) {
     drupal_set_message(t('Unable to find player #@player', array('@player' => $playerid)));
     return;
   }
@@ -292,15 +292,15 @@ function boardgame_form_player_edit($playerid){
 
   return $form;
 }
-function boardgame_form_player_edit_submit($form, &$form_state){
+function boardgame_form_player_edit_submit($form, &$form_state) {
   module_load_include('inc', 'boardgame', 'boardgame_api');
 
   $success = boardgame_player_update($form_state['values']);
-  if($success){
+  if ($success) {
     drupal_set_message(t('Your player was succesfully updated.'), 'status');
     $form_state['redirect'] = 'boardgame/player/' . $form_state['playerid'];
   }
-  else{
+  else {
     drupal_set_message(t('An error occured while updating your player.'), 'error');
   }
 }
