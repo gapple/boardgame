@@ -111,11 +111,12 @@ function boardgame_init_game($playerid, $game_info) {
   $result = db_query('INSERT INTO {boardgame_game}(type, player_count) VALUES("%s", %d)', array($game_info->type, $game_info->player_count));
   $gameid = db_last_insert_id('boardgame_game', 'gameid');
 
-  db_query('INSERT INTO {boardgame_ply}(gameid, move, state) VALUES(%d, "%s", "%s")',
+  db_query('INSERT INTO {boardgame_ply}(gameid, move, state, updated) VALUES(%d, "%s", "%s", %d)',
     array(
       $gameid,
       serialize($game_info->pieces),
       serialize($board),
+      time(),
     )
   );
   boardgame_game_add_player($gameid, $playerid);
@@ -133,7 +134,21 @@ function boardgame_init_game($playerid, $game_info) {
  *    the latest ply will be returned.
  *
  * @return
- *  The board as an array of tiles, or FALSE if it could not be retrieved.
+ *    An object representing the game and its state.
+ *    e.g.
+ * @code
+ *    {
+ *      gameid = 1,
+ *      type = 'amazons',
+ *      player_count = 2, # Number of players required to play the game
+ *      current_ply = 4,  # The latest ply of the game
+ *      ply = 2           # The ply this object represents
+ *      state = array(),  # A keyed array of objects storing tile information
+ *      move = array(),   # An array of move instructions for the given ply.
+ *      move_time = 0,    # A UNIX timestamp of when the ply was stored.
+ *      players = array() # An array of the player ids registed to the game.
+ *    }
+ * @endcode
  */
 function boardgame_get_game($gameid, $ply = NULL) {
   $cache = array();
@@ -156,9 +171,9 @@ function boardgame_get_game($gameid, $ply = NULL) {
       ' WHERE bgg.gameid = %d',
       $query_param
     );
-  $state = db_fetch_object($result);
+  $game = db_fetch_object($result);
 
-  if (!$state) {
+  if (!$game) {
     boardgame_set_error(t(
       'Could not retrieve board for game #@game' . (isset($ply)?', ply #@ply':''),
       array('@game' => $gameid, '@ply' => $ply)
@@ -166,12 +181,45 @@ function boardgame_get_game($gameid, $ply = NULL) {
     return FALSE;
   }
 
-  $state->state = unserialize($state->state);
-  $state->move = unserialize($state->move);
+  $game->players = boardgame_game_get_players($game->gameid);
 
-  $cache[$gameid][$state->ply] = $state;
+  $game->state = unserialize($game->state);
+  $game->move = unserialize($game->move);
 
-  return $state;
+  $cache[$gameid][$game->ply] = $game;
+
+  return $game;
+}
+
+/**
+ * Retrieve all games which have an available player slot, optionally
+ * restricted to those a specific player is not already registered in.
+ *
+ * @param $playerid
+ *    If specified, games which include this player will be removed from the
+ *    returned list.
+ *
+ * @return
+ *    An array of games.
+ */
+function boardgame_get_open_games($playerid = NULL) {
+  $query_player = '';
+  $query_param = array();
+  if (!empty($playerid)) {
+    $query_player = ' AND %d NOT IN (SELECT playerid FROM {boardgame_game_player} bggp WHERE bggp.gameid = bgg.gameid)';
+    $query_param = array($playerid);
+  }
+  $result = db_query('SELECT gameid FROM {boardgame_game} bgg ' .
+      'WHERE ' .
+      'player_count > (SELECT count(playerid) FROM {boardgame_game_player} bggp WHERE bggp.gameid = bgg.gameid)'
+      . $query_player,
+      $query_param);
+
+  $games = array();
+  while ($game = db_fetch_object($result)) {
+    $games[] = boardgame_get_game($game->gameid);
+  }
+  return $games;
 }
 
 /**
