@@ -223,6 +223,59 @@ function boardgame_get_open_games($playerid = NULL) {
 }
 
 /**
+ * Retrieve all games which are in progress, optionally
+ * restricted to those a specific player is registered in.
+ *
+ * In progress means the player quota has been reached and that the game
+ * is not yet closed.
+ *
+ * @param $playerid
+ *    If specified, only games which include this player will be returned.
+ * @return
+ *    An array of games.
+ */
+function boardgame_get_active_games($playerid){
+  $query_player = '';
+  $query_param = array();
+  if (!empty($playerid)) {
+    $query_player = ' AND %d IN (SELECT playerid FROM {boardgame_game_player} bggp WHERE bggp.gameid = bgg.gameid)';
+    $query_param = array($playerid);
+  }
+  $result = db_query('SELECT gameid FROM {boardgame_game} bgg ' .
+      'WHERE (current_ply > 0 OR ' .
+      'player_count <= (SELECT count(playerid) FROM {boardgame_game_player} bggp WHERE bggp.gameid = bgg.gameid))'
+      . $query_player,
+      $query_param);
+
+  $games = array();
+  while ($game = db_fetch_object($result)) {
+    $games[] = boardgame_get_game($game->gameid);
+  }
+  return $games;
+}
+
+/**
+ * Retrieve all games a specific player is registered in.
+ *
+ * @param $playerid
+ * @return
+ *    An array of games.
+ */
+function boardgame_get_player_games($playerid) {
+
+  $result = db_query('SELECT gameid FROM {boardgame_game} bgg ' .
+      'WHERE %d IN (SELECT playerid FROM {boardgame_game_player} bggp WHERE bggp.gameid = bgg.gameid)',
+      array($playerid)
+    );
+
+  $games = array();
+  while ($game = db_fetch_object($result)) {
+    $games[] = boardgame_get_game($game->gameid);
+  }
+  return $games;
+}
+
+/**
  * Apply the provided move to the specified game and store the new
  * state in the database.
  *
