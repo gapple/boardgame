@@ -108,6 +108,9 @@ function boardgame_page_list_games() {
 /**
  * Output a table display of a game.  If a specific ply is not specified,
  * the latest game state is displayed.
+ *
+ * @todo this should be handed off to another module that can properly render
+ *  the board for the game's type.
  */
 function boardgame_page_game($gameid = NULL, $ply = NULL) {
   if (empty($gameid) || !is_numeric($gameid)) {
@@ -122,7 +125,7 @@ function boardgame_page_game($gameid = NULL, $ply = NULL) {
     $ply = intval($ply);
   }
 
-  module_load_include('inc', 'boardgame', 'boardgame_api');
+  module_load_include('inc', 'boardgame', 'boardgame.api');
 
   $game = boardgame_get_game($gameid, $ply);
   if (!$game) {
@@ -230,7 +233,7 @@ function boardgame_form_player_add() {
   return $form;
 }
 function boardgame_form_player_add_submit($form, &$form_state) {
-  module_load_include('inc', 'boardgame', 'boardgame_api');
+  module_load_include('inc', 'boardgame', 'boardgame.api');
 
   $playerid = boardgame_player_create($form_state['values']);
   if ($playerid) {
@@ -293,7 +296,7 @@ function boardgame_form_player_edit($playerid) {
   return $form;
 }
 function boardgame_form_player_edit_submit($form, &$form_state) {
-  module_load_include('inc', 'boardgame', 'boardgame_api');
+  module_load_include('inc', 'boardgame', 'boardgame.api');
 
   $success = boardgame_player_update($form_state['values']);
   if ($success) {
@@ -304,3 +307,16 @@ function boardgame_form_player_edit_submit($form, &$form_state) {
     drupal_set_message(t('An error occured while updating your player.'), 'error');
   }
 }
+
+/**
+ * Implementation of hook_services_resources()
+ */
+function boardgame_services_resources() {
+  $resource = array();
+
+  module_load_include('inc', 'boardgame', 'services/game_resource');
+  $resource = array_merge($resource, _boardgame_game_resource_definition());
+
+  return $resource;
+}
+

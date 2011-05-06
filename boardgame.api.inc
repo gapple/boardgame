@@ -68,7 +68,7 @@ function boardgame_get_error() {
  *  }
  * @endcode
  * The pieces array is identical to the move array required for
- * boardgame_update_game() and boardgame_apply_move(), with the exlusion of
+ * boardgame_update_game() and boardgame_board_apply_move(), with the exlusion of
  * the 'action' attribute (which is always 'add' during initialization).
  *
  * @return
@@ -98,10 +98,10 @@ function boardgame_init_game($playerid, $game_info) {
   // 'action' isn't specified for board setup, but is needed for application function
   $pieces = array();
   foreach ($game_info->pieces as $key => $action) {
-    $pieces[$key] = clone $action;
+      $pieces[$key] = clone $action;
     $pieces[$key]->action = 'add';
   }
-  $board = boardgame_apply_move($board, $pieces);
+  $board = boardgame_board_apply_move($board, $pieces);
   if (!$board) {
     // bubble up error message
     return FALSE;
@@ -202,17 +202,23 @@ function boardgame_get_game($gameid, $ply = NULL) {
  * @return
  *    An array of games.
  */
-function boardgame_get_open_games($playerid = NULL) {
-  $query_player = '';
+function boardgame_get_open_games($type = NULL, $playerid = NULL) {
+  $query_where = array();
   $query_param = array();
-  if (!empty($playerid)) {
-    $query_player = ' AND %d NOT IN (SELECT playerid FROM {boardgame_game_player} bggp WHERE bggp.gameid = bgg.gameid)';
-    $query_param = array($playerid);
+
+  if(!empty($type)){
+    $query_where[] = 'bgg.type = "%s"';
+    $query_param[] = $type;
   }
+  if (!empty($playerid)) {
+    $query_where[] = '%d IN (SELECT playerid FROM {boardgame_game_player} bggp WHERE bggp.gameid = bgg.gameid)';
+    $query_param[] = $playerid;
+  }
+
   $result = db_query('SELECT gameid FROM {boardgame_game} bgg ' .
       'WHERE ' .
-      'player_count > (SELECT count(playerid) FROM {boardgame_game_player} bggp WHERE bggp.gameid = bgg.gameid)'
-      . $query_player,
+      'player_count > (SELECT count(playerid) FROM {boardgame_game_player} bggp WHERE bggp.gameid = bgg.gameid)' .
+      (!empty($query_where)? ' AND ' . implode(' AND ', $query_where): ''),
       $query_param);
 
   $games = array();
@@ -234,17 +240,23 @@ function boardgame_get_open_games($playerid = NULL) {
  * @return
  *    An array of games.
  */
-function boardgame_get_active_games($playerid){
-  $query_player = '';
+function boardgame_get_active_games($type = NULL, $playerid = NULL) {
+  $query_where = array();
   $query_param = array();
-  if (!empty($playerid)) {
-    $query_player = ' AND %d IN (SELECT playerid FROM {boardgame_game_player} bggp WHERE bggp.gameid = bgg.gameid)';
-    $query_param = array($playerid);
+
+  if(!empty($type)){
+    $query_where[] = 'bgg.type = "%s"';
+    $query_param[] = $type;
   }
+  if (!empty($playerid)) {
+    $query_where[] = '%d IN (SELECT playerid FROM {boardgame_game_player} bggp WHERE bggp.gameid = bgg.gameid)';
+    $query_param[] = $playerid;
+  }
+
   $result = db_query('SELECT gameid FROM {boardgame_game} bgg ' .
       'WHERE (current_ply > 0 OR ' .
-      'player_count <= (SELECT count(playerid) FROM {boardgame_game_player} bggp WHERE bggp.gameid = bgg.gameid))'
-      . $query_player,
+      'player_count <= (SELECT count(playerid) FROM {boardgame_game_player} bggp WHERE bggp.gameid = bgg.gameid))' .
+      (!empty($query_where)? ' AND ' . implode(' AND ', $query_where): ''),
       $query_param);
 
   $games = array();
@@ -255,17 +267,29 @@ function boardgame_get_active_games($playerid){
 }
 
 /**
- * Retrieve all games a specific player is registered in.
+ * Retrieve all games not yet closed, optionally restricted to those
+ * a specific player is registered in.
  *
  * @param $playerid
  * @return
  *    An array of games.
  */
-function boardgame_get_player_games($playerid) {
+function boardgame_get_games($type = NULL, $playerid = NULL) {
+  $query_where = array();
+  $query_param = array();
 
-  $result = db_query('SELECT gameid FROM {boardgame_game} bgg ' .
-      'WHERE %d IN (SELECT playerid FROM {boardgame_game_player} bggp WHERE bggp.gameid = bgg.gameid)',
-      array($playerid)
+  if(!empty($type)){
+    $query_where[] = 'bgg.type = "%s"';
+    $query_param[] = $type;
+  }
+  if (!empty($playerid)) {
+    $query_where[] = '%d IN (SELECT playerid FROM {boardgame_game_player} bggp WHERE bggp.gameid = bgg.gameid)';
+    $query_param[] = $playerid;
+  }
+
+  $result = db_query('SELECT gameid FROM {boardgame_game} bgg' .
+      (!empty($query_where)? ' WHERE ' . implode(' AND ', $query_where): ''),
+      $query_param
     );
 
   $games = array();
@@ -283,7 +307,7 @@ function boardgame_get_player_games($playerid) {
  *    The ID of the game to update.
  * @param array $move
  *    An array of operations to perform for the move
- *    @see boardgame_apply_move()
+ *    @see boardgame_board_apply_move()
  *
  * @return
  *    The number of the new ply on success, or FALSE on failure.
@@ -291,7 +315,18 @@ function boardgame_get_player_games($playerid) {
 function boardgame_update_game($gameid, $playerid, $move) {
   $last_state = boardgame_get_game($gameid);
 
-  $board = boardgame_apply_move($last_state->state, $move);
+  // normalize each action to an object
+  foreach ($move as $key => $action) {
+    if (is_array($action)) {
+      $move[$key] = (object) $action;
+    }
+    elseif (!is_object($action)) {
+      boardgame_set_error(t('Invalid move action provided (index @key)', array('@key' => $key)));
+      return FALSE;
+    }
+  }
+
+  $board = boardgame_board_apply_move($last_state->state, $move);
   if (!$board) {
     return FALSE;
   }
@@ -346,7 +381,7 @@ function boardgame_update_game($gameid, $playerid, $move) {
  *  ]
  * @endcode
  */
-function boardgame_apply_move($board, $move) {
+function boardgame_board_apply_move($board, $move) {
 
   foreach ($move as $action) {
     if (!array_key_exists($action->position, $board)) {
@@ -549,4 +584,42 @@ function boardgame_player_update($info) {
   $success = drupal_write_record('boardgame_player', $info, array('playerid'));
 
   return ($success && db_affected_rows())? TRUE : FALSE;
+}
+
+/**
+ * Get the user who owns the specified player.
+ *
+ * @param $playerid
+ *
+ * @return
+ *    The user id of the owner, or false if the playerid is invalid.
+ */
+function boardgame_player_get_user($playerid){
+  $uid = db_result(db_query('SELECT uid FROM {boardgame_player} WHERE playerid = %d', array($playerid)));
+
+  if (!$uid) {
+    boardgame_set_error(t('Could not retrieve user of specified player.'));
+  }
+
+  return $uid;
+}
+
+/**
+ * Retrieve all the players that the specified user owns.
+ *
+ * @param $uid
+ *
+ * @return
+ *    An array of playerids.
+ */
+function boardgame_user_get_players($uid){
+  $players = array();
+
+  $result = db_query('SELECT playerid FROM {boardgame_player} WHERE uid = %d', array($uid));
+
+  while ($p = db_fetch_object($result)) {
+    $players[] = $p->playerid;
+  }
+
+  return $players;
 }
