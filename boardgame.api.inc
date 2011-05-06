@@ -39,6 +39,19 @@ function boardgame_get_error() {
 }
 
 /**
+ * Get information on supported game types
+ */
+function boardgame_gametypes(){
+  static $types = NULL;
+
+  if (!isset($types)) {
+    $types = module_invoke_all('boardgame_gametypes');
+  }
+
+  return $types;
+}
+
+/**
  * Initialize a board and store it to the database
  *
  * @param $playerid
@@ -75,6 +88,7 @@ function boardgame_get_error() {
  *    The id for the new game.
  */
 function boardgame_init_game($playerid, $game_info) {
+  $gametypes = boardgame_gametypes();
 
   if ($game_info->player_count < 2) {
     boardgame_set_error(t(
@@ -83,27 +97,39 @@ function boardgame_init_game($playerid, $game_info) {
     return FALSE;
   }
 
-  // Normalize setup actions to objects and apply to board.
-  $pieces = array();
-  foreach ($game_info->pieces as $key => $action) {
-    if (is_array($action)) {
-      $pieces[$key] = (object) $action;
+  // Initialize board state.
+  if (isset($game_info->pieces)) {
+    // Normalize setup actions to objects and apply to board.
+    $pieces = array();
+    foreach ($game_info->pieces as $key => $action) {
+      if (is_array($action)) {
+        $pieces[$key] = (object) $action;
+        $game_info->pieces[$key] = (object) $action;
+      }
+      elseif (is_object($action)) {
+        $pieces[$key] = clone $action;
+      }
+      else{
+        boardgame_set_error(t('Invalid setup action provided (index @key)', array('@key' => $key)));
+        return FALSE;
+      }
+
+      // 'action' isn't specified for board setup, but is required in apply_move()
+      $pieces[$key]->action = 'add';
     }
-    elseif (is_object($action)) {
-      $pieces[$key] = clone $action;
-    }
-    else{
-      boardgame_set_error(t('Invalid setup action provided (index @key)', array('@key' => $key)));
+    $board = boardgame_board_apply_move(array(), $pieces);
+    if (!$board) {
+      // bubble up error message
       return FALSE;
     }
-
-    // 'action' isn't specified for board setup, but is required in apply_move()
-    $pieces[$key]->action = 'add';
   }
-  $board = boardgame_board_apply_move(array(), $pieces);
-  if (!$board) {
-    // bubble up error message
-    return FALSE;
+  // Load default layout if available
+  else if (isset($gametypes[$game_info->type]['initialize'])) {
+    $func = $gametypes[$game_info->type]['initialize'];
+    $board = $func();
+  }
+  else {
+    $board = array();
   }
 
   // Create game entry, initialize board, and add starting player
@@ -325,6 +351,14 @@ function boardgame_update_game($gameid, $playerid, $move) {
     }
   }
 
+  // validate the move before applying
+  $gametypes = boardgame_gametypes();
+  if (isset($gametypes[$last_state->type]['validate_move'])) {
+    $func = $gametypes[$last_state->type]['validate_move'];
+    if (!$func($last_state->state, $move)) {
+      return FALSE;
+    }
+  }
   $board = boardgame_board_apply_move($last_state->state, $move);
   if (!$board) {
     return FALSE;
