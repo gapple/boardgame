@@ -76,17 +76,6 @@ function boardgame_get_error() {
  */
 function boardgame_init_game($playerid, $game_info) {
 
-  $board = array();
-  // When incrementing strings containing only characters (/^([a-z]+|[A-Z]+)$/)
-  //  PHP treats it similar to a number in base 26, maintaining case.
-  //  e.g. 'a'++ = 'b', 'z'++ = 'aa', 'az'++ = 'ba'
-  // See http://php.net/manual/en/language.operators.increment.php
-  for ($col = 1, $col_alpha = 'a'; $col <= $game_info->cols; ++$col, ++$col_alpha) {
-    for ($row = 1; $row <= $game_info->rows; ++$row) {
-      $board[$col_alpha . $row] = NULL;
-    }
-  }
-
   if ($game_info->player_count < 2) {
     boardgame_set_error(t(
       'Unable to create game: player count must be 2 or greater.'
@@ -94,14 +83,24 @@ function boardgame_init_game($playerid, $game_info) {
     return FALSE;
   }
 
-  // apply positions
-  // 'action' isn't specified for board setup, but is needed for application function
+  // Normalize setup actions to objects and apply to board.
   $pieces = array();
   foreach ($game_info->pieces as $key => $action) {
+    if (is_array($action)) {
+      $pieces[$key] = (object) $action;
+    }
+    elseif (is_object($action)) {
       $pieces[$key] = clone $action;
+    }
+    else{
+      boardgame_set_error(t('Invalid setup action provided (index @key)', array('@key' => $key)));
+      return FALSE;
+    }
+
+    // 'action' isn't specified for board setup, but is required in apply_move()
     $pieces[$key]->action = 'add';
   }
-  $board = boardgame_board_apply_move($board, $pieces);
+  $board = boardgame_board_apply_move(array(), $pieces);
   if (!$board) {
     // bubble up error message
     return FALSE;
@@ -384,9 +383,9 @@ function boardgame_update_game($gameid, $playerid, $move) {
 function boardgame_board_apply_move($board, $move) {
 
   foreach ($move as $action) {
-    if (!array_key_exists($action->position, $board)) {
+    if (!preg_match('/[a-zA-Z0-9]+/', $action->position)) {
       boardgame_set_error(t(
-        'Board position (@position) does not exist.',
+        'Board position (@position) is not valid.',
         array('@position' => $action->position)
       ));
       return FALSE;
