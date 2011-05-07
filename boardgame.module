@@ -109,8 +109,6 @@ function boardgame_page_list_games() {
  * Output a table display of a game.  If a specific ply is not specified,
  * the latest game state is displayed.
  *
- * @todo this should be handed off to another module that can properly render
- *  the board for the game's type.
  */
 function boardgame_page_game($gameid = NULL, $ply = NULL) {
   if (empty($gameid) || !is_numeric($gameid)) {
@@ -132,40 +130,14 @@ function boardgame_page_game($gameid = NULL, $ply = NULL) {
     return boardgame_get_error();
   }
 
-  // Load the board data into a table
+  $gametypes = boardgame_gametypes();
 
-  $board = array();
-  // When incrementing strings containing only characters (/^([a-z]+|[A-Z]+)$/)
-  //  PHP treats it similar to a number in base 26, maintaining case.
-  //  e.g. 'a'++ = 'b', 'z'++ = 'aa', 'az'++ = 'ba'
-  // See http://php.net/manual/en/language.operators.increment.php
-  for ($file_num = 1, $file = 'a'; $file_num <= 10; ++$file_num, ++$file) {
-    for ($rank = 1; $rank <= 10; ++$rank) {
-      $board[$rank][$file] = '';
-    }
+  if (isset($gametypes[$game->type]['render'])) {
+    $func = $gametypes[$game->type]['render'];
+    $content = $func($game);
   }
-
-  foreach ($game->state as $key => $tile) {
-    if (!empty($tile)) {
-      preg_match('/^([a-z]+)([\d]+)/i', $key, $matches);
-      $file = $matches[1];
-      $rank = $matches[2];
-
-      $board[$rank][$file] = $tile->set . ' ' . $tile->type;
-    }
-  }
-  // Ranks need to be reversed to display properly (higher numbers at top)
-  krsort($board);
-  // Files should be added in the proper order, but be safe.
-  foreach (array_keys($board) as $key) {
-    ksort($board[$key]);
-  }
-
-  $content = theme_table(array_keys($board[1]), $board);
-
-  // TODO show information for last move
-  if ($game->ply > 0) {
-
+  else{
+    $content = 'No renderer available for "' . check_plain($game->type) . '" games';
   }
 
   return $content;
