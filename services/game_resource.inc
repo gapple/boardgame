@@ -1,10 +1,10 @@
 <?php
-// $Id$
 /**
- * @file Integration functions for Services.module
+ * @file
+ * Integration functions for Services.module
  */
 
-function _boardgame_game_resource_definition(){
+function _boardgame_game_resource_definition() {
 
   $resource['game']['create'] = array(
     'help' => 'Create a new game.',
@@ -83,18 +83,18 @@ function _boardgame_game_resource_definition(){
 /**
  *
  */
-function _boardgame_game_resource_access($op){
-  $access = false;
+function _boardgame_game_resource_access($op) {
+  $access = FALSE;
 
   $args = func_get_args();
   array_shift($args); // remove $op
 
-  switch ($op){
+  switch ($op) {
     case 'create':
       // check that user is authorized to act for player
       $playerid = array_shift($args);
       module_load_include('inc', 'boardgame', 'boardgame.api');
-      if(boardgame_player_get_user($playerid) == $user->uid){
+      if (boardgame_player_get_user($playerid) == $user->uid) {
         $access = TRUE;
       }
       break;
@@ -114,16 +114,16 @@ function _boardgame_game_resource_create($playerid, $gamedata) {
   module_load_include('inc', 'boardgame', 'boardgame.api');
 
   global $user;
-  if (boardgame_player_get_user($playerid) !== $user->uid){
+  if (boardgame_player_get_user($playerid) !== $user->uid) {
     return services_error(t('Not authorized to act for player @playerid', array('@playerid', $playerid)));
   }
 
   $gameid = boardgame_init_game($playerid, $gamedata);
-  if(!$gameid){
+  if (!$gameid) {
     return services_error(boardgame_get_error());
   }
 
-  return (object)array(
+  return (object) array(
     'gameid' => $gameid,
     'uri' => services_resource_uri(array('game', $gameid)),
   );
@@ -135,7 +135,7 @@ function _boardgame_game_resource_index($parameters) {
   $playerid = (!empty($parameters['player']) && is_numeric($parameters['player']))? intval($parameters['player']) : NULL;
   $type = !empty($parameters['type'])? $parameters['type'] : NULL;
 
-  switch($parameters['status']){
+  switch ($parameters['status']) {
     default:
     case 'all':
       $result = boardgame_get_games($type, $playerid);

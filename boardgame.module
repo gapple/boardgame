@@ -1,5 +1,4 @@
 <?php
-// $Id$
 /**
  * Implementation of hook_perm().
  */
@@ -291,7 +290,7 @@ function boardgame_form_player_edit_submit($form, &$form_state) {
 }
 
 /**
- * Implementation of hook_services_resources()
+ * Implementation of hook_services_resources().
  */
 function boardgame_services_resources() {
   $resource = array();

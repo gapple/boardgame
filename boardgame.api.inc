@@ -1,5 +1,4 @@
 <?php
-// $Id$
 /**
  * @file
  * API functions to handle manipulation of player and game data.
@@ -41,7 +40,7 @@ function boardgame_get_error() {
 /**
  * Get information on supported game types
  */
-function boardgame_gametypes(){
+function boardgame_gametypes() {
   static $types = NULL;
 
   if (!isset($types)) {
@@ -124,7 +123,7 @@ function boardgame_init_game($playerid, $game_info) {
     }
   }
   // Load default layout if available
-  else if (isset($gametypes[$game_info->type]['initialize'])) {
+  elseif (isset($gametypes[$game_info->type]['initialize'])) {
     $func = $gametypes[$game_info->type]['initialize'];
     $board = $func();
   }
@@ -231,7 +230,7 @@ function boardgame_get_open_games($type = NULL, $playerid = NULL) {
   $query_where = array();
   $query_param = array();
 
-  if(!empty($type)){
+  if (!empty($type)) {
     $query_where[] = 'bgg.type = "%s"';
     $query_param[] = $type;
   }
@@ -269,7 +268,7 @@ function boardgame_get_active_games($type = NULL, $playerid = NULL) {
   $query_where = array();
   $query_param = array();
 
-  if(!empty($type)){
+  if (!empty($type)) {
     $query_where[] = 'bgg.type = "%s"';
     $query_param[] = $type;
   }
@@ -303,7 +302,7 @@ function boardgame_get_games($type = NULL, $playerid = NULL) {
   $query_where = array();
   $query_param = array();
 
-  if(!empty($type)){
+  if (!empty($type)) {
     $query_where[] = 'bgg.type = "%s"';
     $query_param[] = $type;
   }
@@ -627,7 +626,7 @@ function boardgame_player_update($info) {
  * @return
  *    The user id of the owner, or false if the playerid is invalid.
  */
-function boardgame_player_get_user($playerid){
+function boardgame_player_get_user($playerid) {
   $uid = db_result(db_query('SELECT uid FROM {boardgame_player} WHERE playerid = %d', array($playerid)));
 
   if (!$uid) {
@@ -645,7 +644,7 @@ function boardgame_player_get_user($playerid){
  * @return
  *    An array of playerids.
  */
-function boardgame_user_get_players($uid){
+function boardgame_user_get_players($uid) {
   $players = array();
 
   $result = db_query('SELECT playerid FROM {boardgame_player} WHERE uid = %d', array($uid));
